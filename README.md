@@ -34,7 +34,7 @@ With the following code:
      , Attr "class" "page" `addAttr` ("id", "page-wrapper")
      ])
 
-When page is rendered, it's expected to see:
+it's expected to see when the page is rendered:
 
       <html>
           <head>
