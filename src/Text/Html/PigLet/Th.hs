@@ -3,8 +3,10 @@
 module Text.Html.PigLet.Th
     ( makeTemplate
     , setContent
-    , embedContent 
-    , Selector(..) )
+    , embedContent
+    , addAttr
+    , pass
+    , Selector (..))
 where
 
 import Util.BlazeFromHtml hiding (main)
@@ -15,7 +17,8 @@ import qualified Text.Blaze.Html5.Attributes as HA
 import Text.Blaze.Html.Renderer.Pretty (renderHtml)
 import Language.Haskell.TH
 import Data.Monoid
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromJust)
+import GHC.Exts (IsString (..))
 
 -- TODO: R
 -- 1. All html5 tags
@@ -23,6 +26,7 @@ import Data.Maybe (isJust)
 
 data Modify = SetContent ExpQ
             | EmbedContent ExpQ
+            | AddAttr (Attribute String)
             | NotTouched
 
 data HtmlMod = HtmlParent String Attributes HtmlMod Modify
@@ -42,11 +46,17 @@ transformHtml :: [(HtmlMod -> HtmlMod)] -> String -> ExpQ
 transformHtml trans htmlStr = genCode $ foldr ($) hm trans
     where hm = html2HtmlMod $ htmlTree html5 htmlStr
 
+pass :: HtmlMod -> HtmlMod
+pass = id
+
 setContent :: Selector -> ExpQ -> HtmlMod -> HtmlMod
 setContent selector expr = attachModify selector (SetContent expr)
 
 embedContent :: Selector -> ExpQ -> HtmlMod -> HtmlMod
 embedContent selector expr = attachModify selector (EmbedContent expr)
+
+addAttr :: Selector -> Attribute String -> HtmlMod -> HtmlMod
+addAttr selector attr = attachModify selector (AddAttr attr)
 
 (##) :: Selector -> Modify -> HtmlMod -> HtmlMod
 selector ## modi = attachModify selector modi
@@ -79,8 +89,11 @@ htmlTree variant = removeEmptyText . fst . makeTree variant False [] .
 genCode :: HtmlMod -> ExpQ
 genCode (HtmlText str) = [| H.toHtml (str :: String) |]
 genCode (HtmlParent tag attrs children NotTouched)
-    | isParent tag = genParent tag attrs children
-    | otherwise = genLeaf tag attrs
+    | isParent tag = genParent tag attrs children Nothing
+    | otherwise = genLeaf tag attrs Nothing
+genCode (HtmlParent tag attrs children (AddAttr attr))
+    | isParent tag = genParent tag attrs children (Just attr)
+    | otherwise = genLeaf tag attrs (Just attr)
 genCode (HtmlParent _ _ _ (SetContent expr)) = expr
 genCode (HtmlParent tag attrs _ (EmbedContent expr)) =
     [| $(getHtmlParent tag) H.! $(genAttrs attrs) $ $expr |]
@@ -90,15 +103,34 @@ genCode _ = error $ "Undefined nodes"
 genHtmls :: HtmlMod -> ExpQ -> ExpQ
 genHtmls html code = [| $(genCode html) <> $code |]
 
-genParent :: String -> Attributes -> HtmlMod -> ExpQ
-genParent tag attrs (HtmlBlock []) = [| $(getHtmlParent tag) H.!
-                                        $(genAttrs attrs)
-                                        $ mempty |]
-genParent tag attrs child = [| $(getHtmlParent tag) H.! $(genAttrs attrs)
-                               $ $(genCode child) |]
+genParent :: String -> Attributes -> HtmlMod -> Maybe (Attribute String) -> ExpQ
+genParent tag attrs (HtmlBlock []) Nothing = [| $(getHtmlParent tag) H.!
+                                                $(genAttrs attrs)
+                                                $ mempty |]
+genParent tag attrs child Nothing = [| $(getHtmlParent tag) H.! $(genAttrs attrs)
+                                       $ $(genCode child) |]
+genParent tag attrs (HtmlBlock []) (Just attr) =
+    [| $(getHtmlParent tag) H.! makeAttrs (mergeAttr attr attrs) $ mempty |]
+genParent tag attrs child (Just attr) =
+    [| $(getHtmlParent tag) H.! makeAttrs (mergeAttr attr attrs) $
+       $(genCode child) |]
 
-genLeaf :: String -> Attributes -> ExpQ
-genLeaf tag attrs = [| $(getHtmlLeaf tag) H.! $(genAttrs attrs) |]
+genLeaf :: String -> Attributes -> Maybe (Attribute String) -> ExpQ
+genLeaf tag attrs Nothing = [| $(getHtmlLeaf tag) H.! $(genAttrs attrs) |]
+genLeaf tag attrs (Just attr) =
+    [| $(getHtmlLeaf tag) H.! makeAttrs (mergeAttr attr attrs) |]
+
+makeAttrs :: Attributes -> H.Attribute
+makeAttrs = mconcat .
+            map (\(n, v) -> fromJust (lookup n html5Attr1) $ fromString v)
+
+mergeAttr :: Attribute String -> Attributes -> Attributes
+mergeAttr (name, value) attrs =
+    case lookup name attrs of
+      Just _  -> map (\(n, v) -> if n == name
+                                 then (n, value ++ " " ++ v)
+                                 else (n, v)) attrs
+      Nothing -> (name, value) : attrs
 
 genAttrs :: Attributes -> ExpQ
 genAttrs  = foldr genAttr [| mempty |]
@@ -179,4 +211,16 @@ html5Attr = [ ("class"       , [| HA.class_ |])
             , ("type"        , [| HA.type_ |])
             , ("for"         , [| HA.for |])
             , ("placeholder" , [| HA.placeholder |])
+            ]
+
+html5Attr1 :: [(String, H.AttributeValue -> H.Attribute)]
+html5Attr1 = [ ("class"      ,  HA.class_ )
+            , ("cite"        ,  HA.cite )
+            , ("src"         ,  HA.src )
+            , ("id"          ,  HA.id )
+            , ("rel"         ,  HA.rel )
+            , ("href"        ,  HA.href )
+            , ("type"        ,  HA.type_ )
+            , ("for"         ,  HA.for )
+            , ("placeholder" ,  HA.placeholder )
             ]
