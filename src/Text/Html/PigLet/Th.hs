@@ -3,7 +3,8 @@
 module Text.Html.PigLet.Th
     ( makeTemplate
     , setContent
-    , embedContent )
+    , embedContent 
+    , Selector(..) )
 where
 
 import Util.BlazeFromHtml hiding (main)
@@ -30,6 +31,10 @@ data HtmlMod = HtmlParent String Attributes HtmlMod Modify
              | HtmlComment String
              | HtmlDoctype
 
+data Selector = Dom String
+              | Attr (Attribute String)
+                deriving (Show)
+
 makeTemplate :: FilePath -> [(HtmlMod -> HtmlMod)] -> ExpQ
 makeTemplate file trans = runIO (readFile file) >>= transformHtml trans
 
@@ -37,18 +42,22 @@ transformHtml :: [(HtmlMod -> HtmlMod)] -> String -> ExpQ
 transformHtml trans htmlStr = genCode $ foldr ($) hm trans
     where hm = html2HtmlMod $ htmlTree html5 htmlStr
 
-setContent :: Attribute String -> ExpQ -> HtmlMod -> HtmlMod
+setContent :: Selector -> ExpQ -> HtmlMod -> HtmlMod
 setContent selector expr = attachModify selector (SetContent expr)
 
-embedContent :: Attribute String -> ExpQ -> HtmlMod -> HtmlMod
+embedContent :: Selector -> ExpQ -> HtmlMod -> HtmlMod
 embedContent selector expr = attachModify selector (EmbedContent expr)
 
-(##) :: Attribute String -> Modify -> HtmlMod -> HtmlMod
+(##) :: Selector -> Modify -> HtmlMod -> HtmlMod
 selector ## modi = attachModify selector modi
 
-attachModify :: Attribute String -> Modify -> HtmlMod -> HtmlMod
+selected :: Selector -> String -> Attributes -> Bool
+selected (Dom tag') tag _ = tag == tag'
+selected (Attr attr) _ attrs = elem attr attrs
+
+attachModify :: Selector -> Modify -> HtmlMod -> HtmlMod
 attachModify selector modi (HtmlParent tag attrs child modi') =
-    if elem selector attrs
+    if selected selector tag attrs
     then HtmlParent tag attrs (attachModify selector modi child) modi
     else HtmlParent tag attrs (attachModify selector modi child) modi'
 attachModify _ _ (HtmlText t) = HtmlText t
@@ -171,4 +180,3 @@ html5Attr = [ ("class"       , [| HA.class_ |])
             , ("for"         , [| HA.for |])
             , ("placeholder" , [| HA.placeholder |])
             ]
-
