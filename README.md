@@ -50,3 +50,8 @@ it's expected to see when the page is rendered:
   </body>
 </html>
 ```
+
+## Todo
+1. Thorough coverage of HTML 5 attributes / tags
+2. Composable HTML transformations
+
