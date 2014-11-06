@@ -33,7 +33,7 @@ import qualified Text.Blaze.Html5 as H
 
 
 page = $(makeTemplate "hello.html" [
-Dom "title" `embedContent` [| H.toHtml "Hello Piggies!" |]
+  Dom "title" `embedContent` [| H.toHtml "Hello Piggies!" |]
 , Attr "class" "page" `addAttr` ("id", "page-wrapper")
 ])
 ```
