@@ -142,6 +142,10 @@ html5Parent = [ ("html"       , [| H.docTypeHtml |])
               , ("command"    , [| H.command |])
               , ("datalist"   , [| H.datalist |])
               , ("dd"         , [| H.dd |])
+              , ("script"     , [| H.script |])
+              , ("nav"        , [| H.nav |])
+              , ("form"       , [| H.form |])
+              , ("label"      , [| H.label |])
               ]
 
 html5Leaf :: [(String , ExpQ)]
@@ -157,7 +161,14 @@ html5Leaf = [ ("area" , [| H.area |])
             , ("param", [| H.param |]) ]
 
 html5Attr :: [(String, ExpQ)]
-html5Attr = [ ("class" , [| HA.class_ |])
-            , ("cite"  , [| HA.cite |])
-            , ("src"   , [| HA.src |])
-            , ("id"    , [| HA.id |])]
+html5Attr = [ ("class"       , [| HA.class_ |])
+            , ("cite"        , [| HA.cite |])
+            , ("src"         , [| HA.src |])
+            , ("id"          , [| HA.id |])
+            , ("rel"         , [| HA.rel |])
+            , ("href"        , [| HA.href |])
+            , ("type"        , [| HA.type_ |])
+            , ("for"         , [| HA.for |])
+            , ("placeholder" , [| HA.placeholder |])
+            ]
+
