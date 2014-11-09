@@ -2,12 +2,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Text.Html.PigLet.HtmlMod where
 
-import Util.BlazeFromHtml   hiding (main)
-import Data.String.Utils           (splitWs)
-import Language.Haskell.TH
 
-import Data.Monoid
-import Text.Html.PigLet.Html5Defs
+import qualified Data.Set as S
+import           Data.String.Utils (splitWs)
+import           Data.List
+import           Data.Monoid
+import           Language.Haskell.TH
+
+import           Util.BlazeFromHtml hiding (main)
+import           Text.Html.PigLet.Html5Defs
 
 pass :: ModNode
 pass = ModNode False NotTouched
@@ -24,29 +27,46 @@ addAttr = addAttrs . (:[])
 addAttrs :: Attrs -> ModNode
 addAttrs = ModNode False . AddAttr
 
-type Attr = (String, [String])
+type Attr = (String, S.Set String)
 type Attrs = [Attr]
 
 data Modify = SetContent ExpQ
             | EmbedContent ExpQ
             | AddAttr Attrs
-            | Comp Modify Modify
             | NotTouched
 
-(^@^) :: Modify -> Modify -> Modify
-NotTouched ^@^ n2         = n2
-n1         ^@^ NotTouched = n1
-n1         ^@^ n2         = Comp n1 n2
-
-
-
-data ModNode = ModNode Bool Modify
+data ModNode = ModNode [Modify] Modify
 
 instance Monoid ModNode where
-    mappend (ModNode True _)   (ModNode True m2)  = ModNode True m2
+    mappend (ModNode attrs1 NotTouched) (ModNode attrs2 m2) =
+        ModNode (mergeAttrs attrs1 attrs2) m2
     mappend (ModNode False m1) (ModNode x m2)     = ModNode x (m1 ^@^ m2)
-    mappend (ModNode x m1)     (ModNode False m2) = ModNode x (m1 ^@^ m2)
+    mappend (ModNode x m1)     (ModNode False m2) = ModNode x (m2 ^@^ m1)
     mempty  = ModNode False NotTouched
+
+data Selector = D String
+              | A (String, [String])
+                deriving (Show)
+
+(>@<) :: Selector -> ModNode -> HtmlMod -> HtmlMod
+(>@<) = attachModify
+
+attachModify :: Selector -> ModNode -> HtmlMod -> HtmlMod
+attachModify selector modn l@(HtmlLeaf tag attrs modn')
+    | selected selector tag attrs = HtmlLeaf tag attrs (modn <> modn')
+    | otherwise = l
+attachModify selector modn (HtmlParent tag attrs child modn')
+    | selected selector tag attrs =
+        HtmlParent tag attrs (attachModify selector modn child) (modn <> modn')
+    | otherwise = HtmlParent tag attrs (attachModify selector modn child) modn'
+attachModify selector modn (HtmlBlock htmls) =
+    HtmlBlock $ map (attachModify selector modn) htmls
+attachModify _ _ t@(HtmlText _) = t
+
+selected :: Selector -> String -> Attrs -> Bool
+selected (D tag') tag _ = tag == tag'
+selected (A (k, v)) _ attrs = maybe False (S.isSubsetOf (S.fromList v))
+                                    (lookup k attrs)
 
 data HtmlMod = HtmlLeaf String Attrs ModNode
              | HtmlParent String Attrs HtmlMod ModNode
@@ -70,4 +90,4 @@ html2HtmlMod t             = error $ (show t) ++ " : Shouldn't happen at all"
 
 makeAttrs :: Attributes -> Attrs
 makeAttrs = map parseAttr
-    where parseAttr (k, vs) = (k, splitWs vs)
+    where parseAttr (k, vs) = (k, S.fromList $ splitWs vs)
