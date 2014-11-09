@@ -13,13 +13,13 @@ pass :: ModNode
 pass = ModNode False NotTouched
 
 setContent :: ExpQ -> ModNode
-setContent expr = ModNode True (SetContent expr)
+setContent = ModNode True . SetContent
 
 embedContent :: ExpQ -> ModNode
-embedContent expr = ModNode True (EmbedContent expr)
+embedContent = ModNode True . EmbedContent
 
 addAttr :: Attr -> ModNode
-addAttr attr = ModNode False (AddAttr [attr])
+addAttr = addAttrs . (:[])
 
 addAttrs :: Attrs -> ModNode
 addAttrs = ModNode False . AddAttr
