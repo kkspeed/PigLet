@@ -9,16 +9,20 @@ module Text.Html.PigLet.Th1
     , Selector (..))
 where
 
-import Util.BlazeFromHtml hiding (main)
-import Util.GenerateHtmlCombinators hiding (main)
-import Text.HTML.TagSoup
-import qualified Text.Blaze.Html5 as H
+import           Text.HTML.TagSoup
+import qualified Text.Blaze.Html5            as H
 import qualified Text.Blaze.Html5.Attributes as HA
-import Text.Blaze.Html.Renderer.Pretty (renderHtml)
-import Language.Haskell.TH
-import Data.Monoid
-import Data.Maybe (fromJust)
+import           Text.Blaze.Html.Renderer.Pretty (renderHtml)
+import           Language.Haskell.TH
+import           Data.Monoid
+import           Data.Maybe (fromJust)
+import           Data.String.Utils (join)
+import qualified Data.Set                    as S
+
 import GHC.Exts (IsString (..))
+
+import Util.BlazeFromHtml           hiding (main)
+import Util.GenerateHtmlCombinators hiding (main)
 
 import Text.Html.PigLet.Html5Defs
 import Text.Html.PigLet.HtmlMod
@@ -50,47 +54,27 @@ genCode (HtmlBlock htmls)                    =
 genHtmls :: HtmlMod -> ExpQ -> ExpQ
 genHtmls html code = [| $(genCode html) <> $code |]
 
--- genCode (HtmlParent _ _ _ (SetContent expr)) = expr
--- genCode (HtmlParent tag attrs _ (EmbedContent expr)) =
---    [| $(getHtmlParent tag) H.! $(genAttrs attrs) $ $expr |]
-
--- genCode _ = error $ "Undefined nodes"
-
 genParent :: String -> Attrs -> HtmlMod -> ModNode -> ExpQ
-genParent = undefined
+genParent _ _ _ (ModNode _ (SetContent expr))                           = expr
+genParent tag attrs _ (ModNode attrMods (EmbedContent expr))            =
+    [| $(getHtmlParent tag) H.! $(genAttrMods attrMods attrs) $ $expr |]
+genParent tag attrs child (ModNode attrMods NotTouched)                 =
+    [| $(getHtmlParent tag) H.! $(genAttrMods attrMods attrs) $ $(genCode child) |]
 
 genLeaf   :: String -> Attrs -> ModNode -> ExpQ
-genLeaf   = undefined
+genLeaf _ _ (ModNode _ (SetContent expr))                     = expr
+genLeaf tag attrs (ModNode attrMods _)                        =
+    [| $(getHtmlLeaf tag) H.! $(genAttrMods attrMods attrs) |]
 
--- genParent :: String -> Attributes -> HtmlMod -> Maybe (Attribute String) -> ExpQ
--- genParent tag attrs (HtmlBlock []) Nothing = [| $(getHtmlParent tag) H.!
---                                                 $(genAttrs attrs)
---                                                 $ mempty |]
--- genParent tag attrs child Nothing = [| $(getHtmlParent tag) H.! $(genAttrs attrs)
---                                        $ $(genCode child) |]
--- genParent tag attrs (HtmlBlock []) (Just attr) =
---     [| $(getHtmlParent tag) H.! makeAttrs (mergeAttr attr attrs) $ mempty |]
--- genParent tag attrs child (Just attr) =
---     [| $(getHtmlParent tag) H.! makeAttrs (mergeAttr attr attrs) $
---        $(genCode child) |]
+genAttrs :: Attrs -> ExpQ
+genAttrs  = foldr genAttr [| mempty |]
+    where genAttr (k, vals) code = let attrVal = join " " $ S.toList vals
+                                   in [| $(getHtmlAttr k) attrVal <> $code |]
 
--- genLeaf :: String -> Attributes -> Maybe (Attribute String) -> ExpQ
--- genLeaf tag attrs Nothing = [| $(getHtmlLeaf tag) H.! $(genAttrs attrs) |]
--- genLeaf tag attrs (Just attr) =
---     [| $(getHtmlLeaf tag) H.! makeAttrs (mergeAttr attr attrs) |]
+genAttrMods :: AttrModify -> Attrs -> ExpQ
+genAttrMods NoAttr           attrs = genAttrs attrs
+genAttrMods (AddAttr aattrs) attrs = genAttrs (mergeAttr aattrs attrs)
 
 makeAttrs :: Attributes -> H.Attribute
 makeAttrs = mconcat .
             map (\(n, v) -> fromJust (lookup n html5Attr1) $ fromString v)
-
-mergeAttr :: Attribute String -> Attributes -> Attributes
-mergeAttr (name, value) attrs =
-    case lookup name attrs of
-      Just _  -> map (\(n, v) -> if n == name
-                                 then (n, value ++ " " ++ v)
-                                 else (n, v)) attrs
-      Nothing -> (name, value) : attrs
-
-genAttrs :: Attributes -> ExpQ
-genAttrs  = foldr genAttr [| mempty |]
-    where genAttr (attr, val) code = [| $(getHtmlAttr attr) val <> $code |]
