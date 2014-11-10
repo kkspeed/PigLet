@@ -2,7 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Text.Html.PigLet.HtmlMod where
 
-
 import qualified Data.Set as S
 import           Data.String.Utils (splitWs)
 import           Data.Monoid
@@ -20,8 +19,8 @@ setContent = ModNode NoAttr . SetContent
 embedContent :: ExpQ -> ModNode
 embedContent = ModNode (AddAttr []) . EmbedContent
 
-addAttr :: Attr -> ModNode
-addAttr = addAttrs . (:[])
+addAttr :: (String, [String]) -> ModNode
+addAttr (k, v) = addAttrs [(k, S.fromList v)]
 
 addAttrs :: Attrs -> ModNode
 addAttrs attrs = ModNode (AddAttr attrs) NotTouched
@@ -69,6 +68,8 @@ data Selector = D String
 
 (>@<) :: Selector -> ModNode -> HtmlMod -> HtmlMod
 (>@<) = attachModify
+
+infix 5 >@<
 
 attachModify :: Selector -> ModNode -> HtmlMod -> HtmlMod
 attachModify selector modn l@(HtmlLeaf tag attrs modn')

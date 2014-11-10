@@ -6,9 +6,10 @@ module Text.Html.PigLet
     , setContent
     , addAttrs
     , addAttr
-    , (>@<))
+    , (>@<)
+    , Selector(..))
 where
 
 import Text.Html.PigLet.Th1 (makeTemplate)
 import Text.Html.PigLet.HtmlMod
-    (pass, setContent, addAttrs, addAttr, (>@<))
+    (pass, setContent, addAttrs, addAttr, (>@<), Selector(..))
