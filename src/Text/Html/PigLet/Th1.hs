@@ -57,9 +57,11 @@ genHtmls html code = [| $(genCode html) <> $code |]
 genParent :: String -> Attrs -> HtmlMod -> ModNode -> ExpQ
 genParent _ _ _ (ModNode _ (SetContent expr))                           = expr
 genParent tag attrs _ (ModNode attrMods (EmbedContent expr))            =
-    [| $(getHtmlParent tag) H.! $(genAttrMods attrMods attrs) $ $expr |]
+    [| $(getHtmlParent tag) H.! $(genAttrMods attrMods attrs)
+       $ $expr |]
 genParent tag attrs child (ModNode attrMods NotTouched)                 =
-    [| $(getHtmlParent tag) H.! $(genAttrMods attrMods attrs) $ $(genCode child) |]
+    [| $(getHtmlParent tag) H.! $(genAttrMods attrMods attrs) $
+       $(genCode child) |]
 
 genLeaf   :: String -> Attrs -> ModNode -> ExpQ
 genLeaf _ _ (ModNode _ (SetContent expr))                     = expr
