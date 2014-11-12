@@ -5,6 +5,7 @@ module Text.Html.PigLet.Th1
     , composeTemplate
     , genTemplate
     , addAttr
+    , maybeAttr
     , var
     )
 where
@@ -148,3 +149,6 @@ addAttr (k, v) attrs = maybe ((k, [v]):attrs)
                          else (k, v:vs) : delKey k attrs)
                        (lookup k attrs)
     where delKey key kvs = filter (not . (== key) . fst) kvs
+
+maybeAttr :: Maybe a -> (String, String) -> AttrsT -> AttrsT
+maybeAttr m kv = maybe id (const $ addAttr kv) m

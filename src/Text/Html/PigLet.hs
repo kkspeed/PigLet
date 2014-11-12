@@ -10,11 +10,12 @@ module Text.Html.PigLet
     , embedContent
     , updateAttr
     , addAttr
+    , maybeAttr
     , (>@<)
     , Selector(..))
 where
 
 import Text.Html.PigLet.Th1 ( defTemplate, composeTemplate, genTemplate, var
-                            , addAttr)
+                            , addAttr, maybeAttr)
 import Text.Html.PigLet.HtmlMod
     (pass, setContent, (>@<), embedContent, Selector(..), updateAttr)
