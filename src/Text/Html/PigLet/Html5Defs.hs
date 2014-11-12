@@ -82,6 +82,9 @@ html5Attr = [ ("class"       , [| HA.class_ |])
             , ("type"        , [| HA.type_ |])
             , ("for"         , [| HA.for |])
             , ("placeholder" , [| HA.placeholder |])
+            , ("action"      , [| HA.action |])
+            , ("method"      , [| HA.method |])
+            , ("name"        , [| HA.name |])
             ]
 
 html5Attr1 :: [(String, H.AttributeValue -> H.Attribute)]

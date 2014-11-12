@@ -10,20 +10,23 @@ import           Language.Haskell.TH
 import           Util.BlazeFromHtml hiding (main)
 import           Text.Html.PigLet.Html5Defs
 
-pass :: ModNode
-pass = ModNode NoAttr NotTouched
+pass :: HtmlMod -> HtmlMod
+pass = id
 
 setContent :: ExpQ -> ModNode
-setContent = ModNode NoAttr . SetContent
+setContent = ModNode [| id |] . SetContent
 
 embedContent :: ExpQ -> ModNode
-embedContent = ModNode (AddAttr []) . EmbedContent
+embedContent = ModNode [| id |] . EmbedContent
 
-addAttr :: (String, [String]) -> ModNode
-addAttr (k, v) = addAttrs [(k, S.fromList v)]
+-- addAttr :: (String, [String]) -> ModNode
+-- addAttr (k, v) = addAttrs [(k, S.fromList v)]
 
-addAttrs :: Attrs -> ModNode
-addAttrs attrs = ModNode (AddAttr attrs) NotTouched
+updateAttr :: ExpQ -> ModNode
+updateAttr attrMod = ModNode [| $attrMod |] NotTouched
+
+noMod :: ModNode
+noMod = ModNode [| id |] NotTouched
 
 type Attr = (String, S.Set String)
 type Attrs = [Attr]
@@ -41,26 +44,26 @@ instance Monoid Modify where
 data AttrModify = AddAttr Attrs
                 | NoAttr
 
-instance Monoid AttrModify where
-    mappend (AddAttr attr1) (AddAttr attr2) = AddAttr (mergeAttr attr1 attr2)
-    mappend NoAttr a2 = a2
-    mappend a1 NoAttr = a1
-    mempty = NoAttr
+-- instance Monoid AttrModify where
+--     mappend (AddAttr attr1) (AddAttr attr2) = AddAttr (mergeAttr attr1 attr2)
+--     mappend NoAttr a2 = a2
+--     mappend a1 NoAttr = a1
+--     mempty = NoAttr
 
 -- TODO: Use Map to do this
-mergeAttr :: Attrs -> Attrs -> Attrs
-mergeAttr attrs1 = foldr insertAttr attrs1
-    where insertAttr (k, vs) attrs = maybe ((k, vs) : delKey k attrs)
-                                     (\v -> (k, S.union v vs) : delKey k attrs)
-                                     (lookup k attrs)
-          delKey k kvs = filter (not . (== k) . fst) kvs
+-- mergeAttr :: Attrs -> Attrs -> Attrs
+-- mergeAttr attrs1 = foldr insertAttr attrs1
+--     where insertAttr (k, vs) attrs = maybe ((k, vs) : delKey k attrs)
+--                                      (\v -> (k, v ++ (vs \\ v)) : delKey k attrs)
+--                                      (lookup k attrs)
+--           delKey k kvs = filter (not . (== k) . fst) kvs
 
-data ModNode = ModNode AttrModify Modify
+data ModNode = ModNode ExpQ Modify
 
 instance Monoid ModNode where
     mappend (ModNode mattrs1 m1) (ModNode mattrs2 m2) =
-        ModNode (mattrs1 <> mattrs2) (m1 <> m2)
-    mempty  = ModNode NoAttr NotTouched
+        ModNode [| $mattrs1 . $mattrs2 |] (m1 <> m2)
+    mempty  = ModNode [| id |] NotTouched
 
 data Selector = D String
               | A (String, [String])
@@ -83,6 +86,15 @@ attachModify selector modn (HtmlBlock htmls) =
     HtmlBlock $ map (attachModify selector modn) htmls
 attachModify _ _ t@(HtmlText _) = t
 
+mergeTree :: Selector -> HtmlMod -> HtmlMod -> HtmlMod
+mergeTree selector child (HtmlParent tag attrs ch modi)
+    | selected selector tag attrs = HtmlParent tag attrs child modi
+    | otherwise = HtmlParent tag attrs (mergeTree selector child ch) modi
+mergeTree selector child (HtmlBlock mods) =
+    HtmlBlock $ map (mergeTree selector child) mods
+mergeTree _ _ t@(HtmlLeaf _ _ _) = t
+mergeTree _ _ t@(HtmlText _) = t
+
 selected :: Selector -> String -> Attrs -> Bool
 selected (D tag') tag _ = tag == tag'
 selected (A (k, v)) _ attrs = maybe False (S.isSubsetOf (S.fromList v))
@@ -96,9 +108,9 @@ data HtmlMod = HtmlLeaf String Attrs ModNode
 html2HtmlMod :: Html -> HtmlMod
 html2HtmlMod (Parent tag attrs child)
     | isParent tag         =
-        HtmlParent tag (makeAttrs attrs) (html2HtmlMod child) pass
+        HtmlParent tag (makeAttrs attrs) (html2HtmlMod child) noMod
     | isLeaf   tag         =
-        HtmlLeaf tag (makeAttrs attrs) pass
+        HtmlLeaf tag (makeAttrs attrs) noMod
     | otherwise            = error $ "Undefined tag: " ++ tag
 html2HtmlMod (Text  t)     = HtmlText t
 html2HtmlMod (Block htmls) = HtmlBlock $ map html2HtmlMod

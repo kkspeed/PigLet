@@ -1,12 +1,12 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Text.Html.PigLet.Th1
-    ( makeTemplate
-    , setContent
-    , embedContent
+    ( defTemplate
+    , composeTemplate
+    , genTemplate
     , addAttr
-    , pass
-    , Selector (..))
+    , var
+    )
 where
 
 import           Text.HTML.TagSoup
@@ -18,6 +18,7 @@ import           Data.Monoid
 import           Data.Maybe (fromJust)
 import           Data.String.Utils (join)
 import qualified Data.Set                    as S
+import Control.Applicative
 
 import GHC.Exts (IsString (..))
 
@@ -31,12 +32,60 @@ import Text.Html.PigLet.HtmlMod
 -- 1. All html5 tags
 -- 2. Better selector
 
-makeTemplate :: FilePath -> [(HtmlMod -> HtmlMod)] -> ExpQ
-makeTemplate file trans = runIO (readFile file) >>= transformHtml trans
+type Args = [String]
 
-transformHtml :: [(HtmlMod -> HtmlMod)] -> String -> ExpQ
-transformHtml trans htmlStr = genCode $ foldr ($) hm trans
-    where hm = html2HtmlMod $ htmlTree html5 htmlStr
+type HtmlTemplate = Q Template
+
+data Template = Template Args HtmlMod
+
+readTemplate :: [String] -> FilePath -> Q Template
+readTemplate params file =  (Template params . makeHtmlMod) <$>
+                            runIO (readFile file)
+
+defTemplate :: [String] -> FilePath -> [HtmlMod -> HtmlMod]
+            -> Q Template
+defTemplate params file trans = transformTemplate trans <$>
+                                readTemplate params file
+
+composeTemplate :: Selector -> HtmlTemplate -> HtmlTemplate -> HtmlTemplate
+composeTemplate selector = liftA2 (mergeTemplate selector)
+
+defSnippet :: [String]
+           -> FilePath
+           -> HtmlTemplate
+           -> Selector
+           -> [HtmlMod -> HtmlMod]
+           -> HtmlTemplate
+defSnippet params file parent selector trans = composeTemplate selector parent
+  $ transformTemplate trans <$> readTemplate params file
+
+mergeTemplate :: Selector -> Template -> Template -> Template
+mergeTemplate selector (Template pa pm) (Template ca cm) =
+    Template (pa <> ca) (mergeTree selector cm pm)
+
+transformTemplate :: [HtmlMod -> HtmlMod] -> Template -> Template
+transformTemplate trans (Template args hm) =
+    Template args (foldr1 (.) trans $ hm)
+
+genTemplate :: HtmlTemplate -> ExpQ
+genTemplate t = do
+  Template args mods <- t
+  lamE (map (varP . mkName) args) [| $(genCode mods) |]
+
+var :: String -> ExpQ
+var = varE . mkName
+
+-- makeTemplate :: FilePath -> [String] -> [(HtmlMod -> HtmlMod)] -> ExpQ
+-- makeTemplate file args trans = runIO (readFile file) >>=
+--                                transformHtml trans args
+
+-- transformHtml :: [(HtmlMod -> HtmlMod)] -> [String] -> String -> ExpQ
+-- transformHtml trans args htmlStr =
+--     lamE (map (varP . mkName) args) [| $(genCode $ foldr ($) hm trans) |]
+--     where hm = html2HtmlMod $ htmlTree html5 htmlStr
+
+makeHtmlMod :: String -> HtmlMod
+makeHtmlMod = html2HtmlMod . htmlTree html5
 
 htmlTree :: HtmlVariant -> String -> Html
 htmlTree variant = removeEmptyText . fst . makeTree variant False [] .
@@ -57,26 +106,45 @@ genHtmls html code = [| $(genCode html) <> $code |]
 genParent :: String -> Attrs -> HtmlMod -> ModNode -> ExpQ
 genParent _ _ _ (ModNode _ (SetContent expr))                           = expr
 genParent tag attrs _ (ModNode attrMods (EmbedContent expr))            =
-    [| $(getHtmlParent tag) H.! $(genAttrMods attrMods attrs)
+    [| $(getHtmlParent tag) H.! genAttrs $attrMods attrTuples
        $ $expr |]
+     where attrTuples = map (\ (k, vs) -> (k, S.toList vs)) attrs
 genParent tag attrs child (ModNode attrMods NotTouched)                 =
-    [| $(getHtmlParent tag) H.! $(genAttrMods attrMods attrs) $
+    [| $(getHtmlParent tag) H.! genAttrs $attrMods attrTuples $
        $(genCode child) |]
+    where attrTuples = map (\ (k, vs) -> (k, S.toList vs)) attrs
 
 genLeaf   :: String -> Attrs -> ModNode -> ExpQ
 genLeaf _ _ (ModNode _ (SetContent expr))                     = expr
 genLeaf tag attrs (ModNode attrMods _)                        =
-    [| $(getHtmlLeaf tag) H.! $(genAttrMods attrMods attrs) |]
+    [| $(getHtmlLeaf tag) H.! genAttrs $attrMods attrTuples |]
+    where attrTuples = map (\ (k, vs) -> (k, S.toList vs)) attrs
 
-genAttrs :: Attrs -> ExpQ
-genAttrs  = foldr genAttr [| mempty |]
-    where genAttr (k, vals) code = let attrVal = join " " $ S.toList vals
-                                   in [| $(getHtmlAttr k) attrVal <> $code |]
+-- genAttrs :: Attrs -> ExpQ
+-- genAttrs  = foldr genAttr [| mempty |]
+--     where genAttr (k, vals) code = let attrVal = join " " $ S.toList vals
+--                                    in [| $(getHtmlAttr k) attrVal <> $code |]
 
-genAttrMods :: AttrModify -> Attrs -> ExpQ
-genAttrMods NoAttr           attrs = genAttrs attrs
-genAttrMods (AddAttr aattrs) attrs = genAttrs (mergeAttr aattrs attrs)
+-- genAttrMods :: AttrModify -> Attrs -> ExpQ
+-- genAttrMods NoAttr           attrs = genAttrs attrs
+-- genAttrMods (AddAttr aattrs) attrs = genAttrs (mergeAttr aattrs attrs)
 
-makeAttrs :: Attributes -> H.Attribute
-makeAttrs = mconcat .
-            map (\(n, v) -> fromJust (lookup n html5Attr1) $ fromString v)
+-- makeAttrs :: Attributes -> H.Attribute
+-- makeAttrs = mconcat .
+--             map (\(n, v) -> fromJust (lookup n html5Attr1) $ fromString v)
+
+type AttrT = (String, [String])
+type AttrsT = [AttrT]
+
+genAttrs :: (AttrsT -> AttrsT) -> AttrsT -> H.Attribute
+genAttrs trans =
+    mconcat . map (\(n, v) -> fromJust (lookup n html5Attr1)
+                   $ fromString $ join " " v) . trans
+
+addAttr :: (String, String) -> AttrsT -> AttrsT
+addAttr (k, v) attrs = maybe ((k, [v]):attrs)
+                       (\ vs -> if v `elem` vs
+                         then (k, vs) : delKey k attrs
+                         else (k, v:vs) : delKey k attrs)
+                       (lookup k attrs)
+    where delKey key kvs = filter (not . (== key) . fst) kvs

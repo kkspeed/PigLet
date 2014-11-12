@@ -1,16 +1,20 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Text.Html.PigLet
-    ( makeTemplate
+    ( defTemplate
+    , composeTemplate
+    , genTemplate
+    , var
     , pass
     , setContent
     , embedContent
-    , addAttrs
+    , updateAttr
     , addAttr
     , (>@<)
     , Selector(..))
 where
 
-import Text.Html.PigLet.Th1 (makeTemplate)
+import Text.Html.PigLet.Th1 ( defTemplate, composeTemplate, genTemplate, var
+                            , addAttr)
 import Text.Html.PigLet.HtmlMod
-    (pass, setContent, addAttrs, addAttr, (>@<), embedContent, Selector(..))
+    (pass, setContent, (>@<), embedContent, Selector(..), updateAttr)
