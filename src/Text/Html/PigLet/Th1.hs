@@ -16,7 +16,6 @@ import qualified Text.Blaze.Html5.Attributes as HA
 import           Text.Blaze.Html.Renderer.Pretty (renderHtml)
 import           Language.Haskell.TH
 import           Data.Monoid
-import           Data.Maybe (fromJust)
 import           Data.String.Utils (join)
 import qualified Data.Set                    as S
 import Control.Applicative
@@ -121,25 +120,14 @@ genLeaf tag attrs (ModNode attrMods _)                        =
     [| $(getHtmlLeaf tag) H.! genAttrs $attrMods attrTuples |]
     where attrTuples = map (\ (k, vs) -> (k, S.toList vs)) attrs
 
--- genAttrs :: Attrs -> ExpQ
--- genAttrs  = foldr genAttr [| mempty |]
---     where genAttr (k, vals) code = let attrVal = join " " $ S.toList vals
---                                    in [| $(getHtmlAttr k) attrVal <> $code |]
-
--- genAttrMods :: AttrModify -> Attrs -> ExpQ
--- genAttrMods NoAttr           attrs = genAttrs attrs
--- genAttrMods (AddAttr aattrs) attrs = genAttrs (mergeAttr aattrs attrs)
-
--- makeAttrs :: Attributes -> H.Attribute
--- makeAttrs = mconcat .
---             map (\(n, v) -> fromJust (lookup n html5Attr1) $ fromString v)
-
 type AttrT = (String, [String])
 type AttrsT = [AttrT]
 
 genAttrs :: (AttrsT -> AttrsT) -> AttrsT -> H.Attribute
 genAttrs trans =
-    mconcat . map (\(n, v) -> fromJust (lookup n html5Attr1)
+    mconcat . map (\(n, v) -> case lookup n html5Attr1 of
+                               Nothing -> error $ "Looking up " ++ n
+                               Just f -> f
                    $ fromString $ join " " v) . trans
 
 addAttr :: (String, String) -> AttrsT -> AttrsT
