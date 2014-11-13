@@ -32,10 +32,10 @@ import           Text.Html.PigLet
 import qualified Text.Blaze.Html5 as H
 
 
-page = $(makeTemplate "hello.html" [
+page = defTemplate [] "hello.html" [
   D "title"             >@< embedContent [| H.toHtml "Hello Piggies!" |]
-, A ("class", ["page"]) >@< addAttr ("id", ["page-wrapper"])
-])
+, A ("class", ["page"]) >@< updateAttr [| addAttr ("id", "page-wrapper") |]
+]
 ```
 
 it's expected to see when the page is rendered:
