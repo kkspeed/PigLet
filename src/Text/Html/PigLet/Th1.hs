@@ -6,6 +6,8 @@ module Text.Html.PigLet.Th1
     , genTemplate
     , addAttr
     , maybeAttr
+    , maybeContent
+    , maybeVal
     , var
     )
 where
@@ -140,3 +142,9 @@ addAttr (k, v) attrs = maybe ((k, [v]):attrs)
 
 maybeAttr :: Maybe a -> (String, String) -> AttrsT -> AttrsT
 maybeAttr m kv = maybe id (const $ addAttr kv) m
+
+maybeVal :: (Show a) => Maybe a -> String -> AttrsT -> AttrsT
+maybeVal v k = maybe id (\x -> addAttr (k, show x)) v
+
+maybeContent :: (H.ToMarkup a) => Maybe a -> H.Html
+maybeContent = maybe mempty H.toHtml
